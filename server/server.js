@@ -17,14 +17,22 @@ connectDB();
 app.use('/api/slots', slotsRouter);
 app.use('/api/alerts', alertsRouter);
 
+app.get('/api', (req, res) => {
+  res.json({ message: 'Solar Cold Storage API', status: 'running', database: 'connected' });
+});
+
 app.get('/', (req, res) => {
   res.json({ message: 'Solar Cold Storage API', status: 'running', database: 'connected' });
 });
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ message: 'Server error' });
+  res.status(500).json({ message: 'Server error: ' + err.message });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
