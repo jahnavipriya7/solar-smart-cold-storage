@@ -91,7 +91,7 @@ export default function Dashboard() {
       {/* Active Chambers List (Clean Table) */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>❄️ Active Storage Chambers (5.0L Limit)</span>
+          <span>❄️ Active Storage Chambers (5.0L Hardware Limit)</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--mu)', fontWeight: 400 }}>Refreshes every 5s</span>
         </div>
 
@@ -107,7 +107,7 @@ export default function Dashboard() {
                   <th>Chamber</th>
                   <th>Farmer</th>
                   <th>Contact</th>
-                  <th>Capacity (5L Limit)</th>
+                  <th>Weight &amp; Volume (5L Max)</th>
                   <th>Produce &amp; Shelf Life</th>
                   <th>Temp / Humidity</th>
                   <th>Gas Sensor</th>
@@ -116,8 +116,11 @@ export default function Dashboard() {
               <tbody>
                 {slots.map(s => {
                   const minShelf = Math.min(...(s.vegetables || []).map(v => v.shelfLifeDays || 30));
-                  const usedL = s.usedCapacityLitres || 1.0;
+                  const usedL = s.usedCapacityLitres || 3.0;
+                  const usedKg = s.usedWeightKg || parseFloat((usedL / 1.5).toFixed(1));
                   const totalL = s.totalCapacityLitres || 5.0;
+                  const isFull = usedL >= totalL;
+
                   return (
                     <tr key={s._id}>
                       <td>
@@ -126,11 +129,11 @@ export default function Dashboard() {
                       <td>{s.farmerName}</td>
                       <td style={{ color: 'var(--mu)' }}>{s.farmerPhone}</td>
                       <td>
-                        <strong style={{ color: usedL >= totalL ? 'var(--ra)' : 'var(--gl)' }}>
-                          {usedL.toFixed(1)}L / {totalL.toFixed(1)}L
+                        <strong style={{ color: isFull ? 'var(--ra)' : 'var(--gl)' }}>
+                          {usedL.toFixed(1)}L / {totalL.toFixed(1)}L ({usedKg} kg)
                         </strong>
-                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--mu)' }}>
-                          {Math.max(0, totalL - usedL).toFixed(1)}L free
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: isFull ? 'var(--ra)' : 'var(--mu)' }}>
+                          {isFull ? '⛔ Full' : `${Math.max(0, totalL - usedL).toFixed(1)}L free`}
                         </span>
                       </td>
                       <td>

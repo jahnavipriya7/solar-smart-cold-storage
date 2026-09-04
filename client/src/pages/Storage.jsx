@@ -3,13 +3,13 @@ import { useStorage } from '../context/StorageContext';
 import VegSelector from '../components/VegSelector';
 import SlotCard from '../components/SlotCard';
 import { slotsAPI } from '../utils/api';
-import { computeRange } from '../utils/vegetables';
+import { computeRange, convertKgToLitres } from '../utils/vegetables';
 
 export default function Storage() {
   const { slots, loading, fetchSlots, createSlot, addVegetablesToSlot } = useStorage();
   const [farmerName, setFarmerName] = useState('');
   const [farmerPhone, setFarmerPhone] = useState('');
-  const [quantityLitres, setQuantityLitres] = useState('2.0');
+  const [weightKg, setWeightKg] = useState('2.0');
   const [selectedVegs, setSelectedVegs] = useState([]);
   const [compatData, setCompatData] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -20,14 +20,14 @@ export default function Storage() {
     return () => clearInterval(iv);
   }, [fetchSlots]);
 
-  const runCompatCheck = useCallback(async (vegs, qty) => {
+  const runCompatCheck = useCallback(async (vegs, kgVal) => {
     if (!vegs.length) {
       setCompatData(null);
       return;
     }
     setChecking(true);
     try {
-      const res = await slotsAPI.checkCompat(vegs, parseFloat(qty) || 1.0);
+      const res = await slotsAPI.checkCompat(vegs, parseFloat(kgVal) || 1.0);
       setCompatData(res.data);
     } catch {
       setCompatData(null);
@@ -38,23 +38,30 @@ export default function Storage() {
 
   const handleVegChange = (vegs) => {
     setSelectedVegs(vegs);
-    runCompatCheck(vegs, quantityLitres);
+    runCompatCheck(vegs, weightKg);
   };
 
-  const handleQtyChange = (e) => {
+  const handleWeightChange = (e) => {
     const val = e.target.value;
-    setQuantityLitres(val);
+    setWeightKg(val);
     runCompatCheck(selectedVegs, val);
   };
+
+  const kgNum = parseFloat(weightKg) || 0;
+  const convertedLitres = convertKgToLitres(selectedVegs, kgNum);
+  const isOverCapacity = convertedLitres > 5.0;
 
   const handleCreate = async () => {
     if (!farmerName.trim() || !farmerPhone.trim()) {
       alert('Please enter Farmer Name and Contact Phone Number.');
       return;
     }
-    const qty = parseFloat(quantityLitres);
-    if (!qty || qty <= 0 || qty > 5.0) {
-      alert('Crop quantity must be between 0.1 and 5.0 Litres (Total chamber capacity is 5 Litres).');
+    if (!kgNum || kgNum <= 0) {
+      alert('Please enter a valid crop weight in kg.');
+      return;
+    }
+    if (isOverCapacity) {
+      alert(`Crop weight of ${kgNum} kg converts to ${convertedLitres} Litres, which exceeds the 5.0 Litre hardware chamber limit.`);
       return;
     }
     if (!selectedVegs.length) return;
@@ -64,7 +71,8 @@ export default function Storage() {
     await createSlot({
       farmerName: farmerName.trim(),
       farmerPhone: farmerPhone.trim(),
-      quantityLitres: qty,
+      weightKg: kgNum,
+      quantityLitres: convertedLitres,
       vegetables: selectedVegs
     });
 
@@ -72,38 +80,39 @@ export default function Storage() {
     setCompatData(null);
     setFarmerName('');
     setFarmerPhone('');
-    setQuantityLitres('2.0');
+    setWeightKg('2.0');
     await fetchSlots();
   };
 
   const handleAddToSlot = async (slotId) => {
     if (!farmerName.trim() || !farmerPhone.trim()) {
-      alert('Please enter Farmer Name and Phone Number to record ownership.');
+      alert('Please enter Farmer Name and Phone Number to record produce ownership.');
       return;
     }
-    const qty = parseFloat(quantityLitres) || 1.0;
     await addVegetablesToSlot(slotId, {
       vegetables: selectedVegs,
       farmerName: farmerName.trim(),
       farmerPhone: farmerPhone.trim(),
-      quantityLitres: qty
+      weightKg: kgNum,
+      quantityLitres: convertedLitres
     });
     setSelectedVegs([]);
     setCompatData(null);
-    setQuantityLitres('2.0');
+    setWeightKg('2.0');
     await fetchSlots();
   };
 
   const range = computeRange(selectedVegs);
-  const qty = parseFloat(quantityLitres) || 0;
   const hasCompat = compatData?.slots?.some(s => s.compatible);
 
   let banner = null;
   if (selectedVegs.length && compatData) {
-    if (qty > 5.0) {
+    if (isOverCapacity) {
       banner = (
         <div className="compat-banner compat-bad">
-          🚨 <strong>Quantity exceeds chamber capacity!</strong> Maximum capacity is 5.0 Litres only (you entered {qty}L).
+          🚨 <strong>5L Hardware Capacity Exceeded!</strong>
+          <br />
+          {kgNum} kg of selected produce converts to <strong>{convertedLitres} Litres</strong> (Maximum hardware limit is 5.0 Litres). Please reduce weight to $\le$ {(5.0 / (convertedLitres / kgNum)).toFixed(1)} kg.
         </div>
       );
     } else if (!compatData.selfCompatible) {
@@ -115,20 +124,20 @@ export default function Storage() {
     } else if (!slots.length) {
       banner = (
         <div className="compat-banner compat-ok">
-          ✅ Ready to allocate a new 5L chamber for <strong>{qty}L</strong> of produce at <strong>{range?.targetTemp}°C</strong> &amp; <strong>{range?.targetHumidity}% RH</strong>.
+          ✅ Ready to allocate a new 5L chamber for <strong>{kgNum} kg ({convertedLitres}L)</strong> at <strong>{range?.targetTemp}°C</strong> &amp; <strong>{range?.targetHumidity}% RH</strong>.
         </div>
       );
     } else if (hasCompat) {
       const n = compatData.slots.filter(s => s.compatible).length;
       banner = (
         <div className="compat-banner compat-ok">
-          ✅ <strong>{n} Chamber(s) have available space &amp; matching climate!</strong> You can merge {qty}L into an existing chamber (within 5L limit) or allocate a fresh unit.
+          ✅ <strong>{n} Chamber(s) have available volume &amp; matching climate!</strong> You can merge {kgNum} kg ({convertedLitres}L) into an existing unit or allocate a fresh 5L chamber.
         </div>
       );
     } else {
       banner = (
         <div className="compat-banner compat-warn">
-          ℹ️ No active chamber matches these climate requirements or has enough free capacity. A new 5L storage chamber will be automatically allocated.
+          ℹ️ No active chamber matches these climate parameters or has enough free volume for {convertedLitres}L. A fresh 5L chamber will be automatically allocated.
         </div>
       );
     }
@@ -138,7 +147,7 @@ export default function Storage() {
     <div>
       <div className="page-header">
         <h1>🌾 Smart <span>Cold Storage</span> Management</h1>
-        <p>Enter farmer details, crop quantity (Max 5L capacity), and vegetables — the IoT system automatically assigns chambers and monitors conditions</p>
+        <p>Enter crop weight in kg (auto-converted to litres for 5L hardware chamber) and select vegetables — the IoT system automatically assigns chambers and monitors conditions</p>
       </div>
 
       <div className="storage-layout">
@@ -146,6 +155,7 @@ export default function Storage() {
         <div>
           <div className="card" style={{ marginBottom: '14px' }}>
             <div className="card-title">👨‍🌾 Farmer &amp; Crop Intake Details</div>
+            
             <div className="form-group">
               <label>Farmer Full Name *</label>
               <input
@@ -156,6 +166,7 @@ export default function Storage() {
                 required
               />
             </div>
+            
             <div className="form-group">
               <label>Farmer Contact Phone Number *</label>
               <input
@@ -168,30 +179,52 @@ export default function Storage() {
               />
             </div>
 
-            {/* Crop Quantity (Litres) Input */}
+            {/* Crop Weight (Kg) Input with Auto-Conversion to Litres */}
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label>Crop Quantity (Litres) *</label>
-                <span style={{ fontSize: '0.74rem', color: 'var(--sy)', fontWeight: 600 }}>Total Chamber Capacity: 5.0L</span>
+                <label>Crop Weight (in Kilograms - kg) *</label>
+                <span style={{ fontSize: '0.74rem', color: 'var(--sy)', fontWeight: 600 }}>Hardware Limit: 5.0 Litres</span>
               </div>
               <input
                 className="form-input"
                 type="number"
                 step="0.1"
                 min="0.1"
-                max="5.0"
                 placeholder="e.g. 2.0"
-                value={quantityLitres}
-                onChange={handleQtyChange}
+                value={weightKg}
+                onChange={handleWeightChange}
                 required
               />
+              
+              {/* Live Volumetric Conversion Indicator */}
+              {selectedVegs.length > 0 && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: isOverCapacity ? 'rgba(224,48,48,0.12)' : 'rgba(46,196,110,0.12)',
+                  border: isOverCapacity ? '1px solid rgba(224,48,48,0.3)' : '1px solid rgba(46,196,110,0.3)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: '0.8rem'
+                }}>
+                  <span>
+                    ⚖️ <strong>{kgNum} kg</strong> converts to volume:
+                  </span>
+                  <strong style={{ color: isOverCapacity ? 'var(--ra)' : 'var(--gl)', fontSize: '0.95rem' }}>
+                    📦 {convertedLitres} Litres {isOverCapacity ? '(⛔ Exceeds 5L Max)' : '(✓ Fits in 5L)'}
+                  </strong>
+                </div>
+              )}
+
               <div style={{ fontSize: '0.72rem', color: 'var(--mu)', marginTop: '4px' }}>
-                Each smart cold storage chamber holds a maximum of <strong>5 Litres</strong>.
+                💡 Bulk packing density of selected crops is automatically applied to convert kg into volume (Litres).
               </div>
             </div>
 
             <div style={{ fontSize: '0.78rem', color: 'var(--mu)', background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--br)' }}>
-              🔒 <strong>Chamber Allocation:</strong> Automated. System auto-assigns 5L chambers or tests capacity before merging.
+              🔒 <strong>Chamber Allocation:</strong> Automatic. The system allocates 5L units or tests free space before merging.
             </div>
           </div>
 
@@ -207,14 +240,14 @@ export default function Storage() {
 
             {banner}
 
-            {selectedVegs.length > 0 && range && qty <= 5.0 && (
+            {selectedVegs.length > 0 && range && !isOverCapacity && (
               <button
                 className="btn btn-primary"
                 style={{ width: '100%', marginTop: '14px', justifyContent: 'center' }}
                 onClick={handleCreate}
-                disabled={loading || !range}
+                disabled={loading || !range || isOverCapacity}
               >
-                {loading ? '⏳ Allocating Chamber...' : `⚡ Auto-Allocate 5L Storage Chamber (${qty}L)`}
+                {loading ? '⏳ Allocating Chamber...' : `⚡ Auto-Allocate 5L Chamber (${kgNum} kg / ${convertedLitres}L)`}
               </button>
             )}
           </div>
@@ -227,14 +260,14 @@ export default function Storage() {
               Active Storage Chambers ({slots.length})
             </h2>
             <span style={{ fontSize: '.76rem', color: 'var(--mu)' }}>
-              Total Unit Limit: 5.0 Litres • 5s live updates
+              Chamber Limit: 5.0 Litres • 5s live updates
             </span>
           </div>
 
           {!slots.length ? (
             <div className="empty-state">
               <div className="ei">❄️</div>
-              <p>No storage chambers currently in use.<br />Select produce and quantity on the left to allocate the first chamber.</p>
+              <p>No storage chambers currently in use.<br />Select produce and weight in kg on the left to allocate the first chamber.</p>
             </div>
           ) : (
             slots.map(slot => {
@@ -245,7 +278,8 @@ export default function Storage() {
                   slot={slot}
                   compatResult={cr}
                   selectedVegs={selectedVegs}
-                  incomingQty={qty}
+                  incomingKg={kgNum}
+                  incomingLitres={convertedLitres}
                   onAddVegs={handleAddToSlot}
                 />
               );

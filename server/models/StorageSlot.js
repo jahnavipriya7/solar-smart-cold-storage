@@ -8,7 +8,8 @@ const vegetableItemSchema = new mongoose.Schema({
   minHumidity: Number,
   maxHumidity: Number,
   shelfLifeDays: Number,
-  category: String
+  category: String,
+  densityLitersPerKg: Number
 }, { _id: false });
 
 const storageSlotSchema = new mongoose.Schema({
@@ -16,9 +17,10 @@ const storageSlotSchema = new mongoose.Schema({
   farmerName: { type: String, required: true },
   farmerPhone: { type: String, required: true },
   
-  // Crop Quantity & 5-Litre Capacity Limit
-  totalCapacityLitres: { type: Number, default: 5 },
-  usedCapacityLitres: { type: Number, required: true, default: 1 },
+  // Crop Quantity (Kg & 5-Litre Volume Tracking)
+  usedWeightKg: { type: Number, required: true, default: 2.0 },
+  usedCapacityLitres: { type: Number, required: true, default: 3.0 },
+  totalCapacityLitres: { type: Number, default: 5.0 },
   
   vegetables: [vegetableItemSchema],
   minTemp: { type: Number, required: true },

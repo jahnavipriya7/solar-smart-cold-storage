@@ -1,17 +1,16 @@
 import axios from 'axios';
+import { convertKgToLitres } from './vegetables';
 
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
-const LOCAL_STORAGE_KEY = 'solar_cold_storage_slots_v2';
-const LOCAL_ALERTS_KEY = 'solar_cold_storage_alerts_v2';
+const LOCAL_STORAGE_KEY = 'solar_cold_storage_slots_v4';
+const LOCAL_ALERTS_KEY = 'solar_cold_storage_alerts_v4';
 
 function getLocalSlots() {
   try {
     const data = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (data) return JSON.parse(data);
-  } catch (e) {
-    console.error('LocalStorage error', e);
-  }
+  } catch (e) {}
   const initial = [
     {
       _id: 'slot-1',
@@ -19,10 +18,11 @@ function getLocalSlots() {
       farmerName: 'Ramesh Kumar',
       farmerPhone: '+91 98765 43210',
       totalCapacityLitres: 5.0,
-      usedCapacityLitres: 2.5,
+      usedCapacityLitres: 3.5,
+      usedWeightKg: 2.0,
       vegetables: [
-        { name: 'Carrot', emoji: '🥕', minTemp: 0, maxTemp: 2, minHumidity: 95, maxHumidity: 100, shelfLifeDays: 35, category: 'Root' },
-        { name: 'Spinach', emoji: '🥬', minTemp: 0, maxTemp: 2, minHumidity: 95, maxHumidity: 100, shelfLifeDays: 12, category: 'Leafy' }
+        { name: 'Carrot', emoji: '🥕', minTemp: 0, maxTemp: 2, minHumidity: 95, maxHumidity: 100, shelfLifeDays: 35, category: 'Root', densityLitersPerKg: 1.4 },
+        { name: 'Spinach', emoji: '🥬', minTemp: 0, maxTemp: 2, minHumidity: 95, maxHumidity: 100, shelfLifeDays: 12, category: 'Leafy', densityLitersPerKg: 2.2 }
       ],
       minTemp: 0,
       maxTemp: 2,
@@ -49,9 +49,10 @@ function getLocalSlots() {
       farmerPhone: '+91 91234 56789',
       totalCapacityLitres: 5.0,
       usedCapacityLitres: 3.0,
+      usedWeightKg: 2.3,
       vegetables: [
-        { name: 'Potato', emoji: '🥔', minTemp: 4, maxTemp: 7, minHumidity: 95, maxHumidity: 98, shelfLifeDays: 180, category: 'Root' },
-        { name: 'Beans', emoji: '🫘', minTemp: 4, maxTemp: 7, minHumidity: 90, maxHumidity: 95, shelfLifeDays: 8, category: 'Legume' }
+        { name: 'Potato', emoji: '🥔', minTemp: 4, maxTemp: 7, minHumidity: 95, maxHumidity: 98, shelfLifeDays: 180, category: 'Root', densityLitersPerKg: 1.3 },
+        { name: 'Beans', emoji: '🫘', minTemp: 4, maxTemp: 7, minHumidity: 90, maxHumidity: 95, shelfLifeDays: 8, category: 'Legume', densityLitersPerKg: 1.6 }
       ],
       minTemp: 4,
       maxTemp: 7,
@@ -112,7 +113,6 @@ export const slotsAPI = {
       }
     } catch (e) {}
     
-    // Fallback: Live Local Preview
     const local = getLocalSlots();
     const updated = local.map(s => ({
       ...s,
@@ -143,9 +143,11 @@ export const slotsAPI = {
       }
     } catch (e) {}
 
-    // Resilient local allocation fallback
     const local = getLocalSlots();
     const vegs = data.vegetables || [];
+    const kg = parseFloat(data.weightKg) || 1.5;
+    const volL = convertKgToLitres(vegs, kg);
+
     const minT = vegs.length ? Math.max(...vegs.map(v => v.minTemp)) : 0;
     const maxT = vegs.length ? Math.min(...vegs.map(v => v.maxTemp)) : 2;
     const minH = vegs.length ? Math.max(...vegs.map(v => v.minHumidity)) : 95;
@@ -159,8 +161,9 @@ export const slotsAPI = {
       allocatedSlot: `Chamber ${chamberLetter}-${chamberNum}`,
       farmerName: data.farmerName || 'Farmer',
       farmerPhone: data.farmerPhone || '+91 99999 88888',
+      usedWeightKg: kg,
       totalCapacityLitres: 5.0,
-      usedCapacityLitres: parseFloat(data.quantityLitres) || 2.0,
+      usedCapacityLitres: volL,
       vegetables: vegs,
       minTemp: minT,
       maxTemp: maxT,
@@ -190,7 +193,7 @@ export const slotsAPI = {
     alerts.unshift({
       _id: 'a-' + Date.now(),
       type: 'info',
-      message: `${newSlot.allocatedSlot} allocated to ${newSlot.farmerName} (${newSlot.farmerPhone}). Quantity: ${newSlot.usedCapacityLitres}L / 5L.`,
+      message: `${newSlot.allocatedSlot} allocated to ${newSlot.farmerName} (${newSlot.farmerPhone}). Quantity: ${kg} kg (${volL}L / 5L capacity).`,
       createdAt: new Date().toISOString()
     });
     try {
@@ -215,13 +218,15 @@ export const slotsAPI = {
     return { data: { message: 'Deleted' } };
   },
 
-  checkCompat: async (vegetables, quantityLitres) => {
+  checkCompat: async (vegetables, weightKg) => {
     try {
-      const res = await axios.post(`${BASE}/slots/check-compat`, { vegetables, quantityLitres }, { timeout: 3000 });
+      const res = await axios.post(`${BASE}/slots/check-compat`, { vegetables, weightKg }, { timeout: 3000 });
       if (res && res.data && res.data.slots) return res;
     } catch (e) {}
 
-    const qty = parseFloat(quantityLitres) || 1.0;
+    const kg = parseFloat(weightKg) || 1.0;
+    const incomingLitres = convertKgToLitres(vegetables, kg);
+
     let minT = vegetables[0].minTemp, maxT = vegetables[0].maxTemp;
     let minH = vegetables[0].minHumidity, maxH = vegetables[0].maxHumidity;
     for (let i = 1; i < vegetables.length; i++) {
@@ -238,14 +243,14 @@ export const slotsAPI = {
       const oMinH = Math.max(slot.minHumidity, minH);
       const oMaxH = Math.min(slot.maxHumidity, maxH);
       const isClimateCompat = oMinT <= oMaxT && oMinH <= oMaxH;
-      const availableCapacity = Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0));
-      const hasCapacity = (slot.usedCapacityLitres || 0) + qty <= (slot.totalCapacityLitres || 5.0);
+      const availableCapacityL = Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0));
+      const hasCapacity = (slot.usedCapacityLitres || 0) + incomingLitres <= (slot.totalCapacityLitres || 5.0);
       const isCompat = isClimateCompat && hasCapacity;
 
       let reason = '';
       if (!isClimateCompat) reason = 'Incompatible Temperature / Humidity';
-      else if (!hasCapacity) reason = `Capacity Exceeded (${availableCapacity.toFixed(1)}L remaining of 5L)`;
-      else reason = `Compatible (${((slot.usedCapacityLitres || 0) + qty).toFixed(1)}L / 5L used)`;
+      else if (!hasCapacity) reason = `Chamber Full / Exceeded (${availableCapacityL.toFixed(1)}L remaining of 5L)`;
+      else reason = `Compatible (${((slot.usedCapacityLitres || 0) + incomingLitres).toFixed(1)}L / 5L capacity used)`;
 
       return {
         _id: slot._id,
@@ -254,7 +259,8 @@ export const slotsAPI = {
         farmerPhone: slot.farmerPhone,
         totalCapacityLitres: slot.totalCapacityLitres || 5.0,
         usedCapacityLitres: slot.usedCapacityLitres || 0,
-        availableCapacityLitres: availableCapacity,
+        usedWeightKg: slot.usedWeightKg || 0,
+        availableCapacityLitres: availableCapacityL,
         currentVegs: slot.vegetables.map(v => v.name),
         slotTempRange: `${slot.minTemp}–${slot.maxTemp}°C`,
         slotHumidityRange: `${slot.minHumidity}–${slot.maxHumidity}%`,
@@ -272,6 +278,7 @@ export const slotsAPI = {
       data: {
         selfCompatible: selfCompat,
         newRange: { minTemp: minT, maxTemp: maxT, targetTemp: parseFloat(((minT + maxT) / 2).toFixed(1)), minHumidity: minH, maxHumidity: maxH, targetHumidity: parseFloat(((minH + maxH) / 2).toFixed(1)) },
+        incomingLitres,
         slots: results
       }
     };
@@ -285,8 +292,11 @@ export const slotsAPI = {
     const local = getLocalSlots();
     const slot = local.find(s => s._id === id);
     if (slot) {
+      const kg = parseFloat(data.weightKg) || 1.0;
+      const volL = convertKgToLitres(data.vegetables, kg);
       slot.vegetables = [...slot.vegetables, ...data.vegetables];
-      slot.usedCapacityLitres = (slot.usedCapacityLitres || 0) + (parseFloat(data.quantityLitres) || 1.0);
+      slot.usedWeightKg = (slot.usedWeightKg || 0) + kg;
+      slot.usedCapacityLitres = (slot.usedCapacityLitres || 0) + volL;
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(local));
       } catch (e) {}

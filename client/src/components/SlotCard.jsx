@@ -5,7 +5,7 @@ function daysSince(d) {
   return Math.floor((Date.now() - new Date(d)) / 86400000);
 }
 
-export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, incomingQty }) {
+export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, incomingKg, incomingLitres }) {
   const { deleteSlot } = useStorage();
   const [conf, setConf] = useState(false);
 
@@ -17,10 +17,12 @@ export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, 
   const gasIcon = slot.spoilageStatus === 'Spoiled' ? '🚨' : slot.spoilageStatus === 'Warning' ? '⚠️' : '🍃';
 
   // Capacity calculations (5 Litres max)
-  const totalCap = slot.totalCapacityLitres || 5.0;
-  const usedCap = slot.usedCapacityLitres || 1.0;
-  const freeCap = Math.max(0, totalCap - usedCap);
-  const capPct = Math.min(100, Math.round((usedCap / totalCap) * 100));
+  const totalCapL = slot.totalCapacityLitres || 5.0;
+  const usedCapL = slot.usedCapacityLitres || 3.0;
+  const usedKg = slot.usedWeightKg || parseFloat((usedCapL / 1.5).toFixed(1));
+  const freeCapL = Math.max(0, totalCapL - usedCapL);
+  const freeKg = parseFloat((freeCapL / 1.5).toFixed(1));
+  const capPct = Math.min(100, Math.round((usedCapL / totalCapL) * 100));
 
   // Shelf life
   const minShelf = Math.min(...(slot.vegetables || []).map(v => v.shelfLifeDays || 30));
@@ -44,15 +46,17 @@ export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, 
         </div>
       </div>
 
-      {/* 5-Litre Capacity Progress Section */}
+      {/* 5-Litre Capacity & Weight Progress Section */}
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '9px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem', marginBottom: '5px' }}>
-          <span>📦 Chamber Volume (5L Max): <strong style={{ color: 'var(--tm)' }}>{usedCap.toFixed(1)}L / {totalCap.toFixed(1)}L Used</strong></span>
-          <span style={{ color: freeCap === 0 ? 'var(--ra)' : 'var(--gl)', fontWeight: 600 }}>
-            {freeCap === 0 ? '⛔ Full' : freeCap.toFixed(1) + 'L Free Space'}
+          <span>
+            📦 Chamber Volume: <strong style={{ color: 'var(--tm)' }}>{usedCapL.toFixed(1)}L / {totalCapL.toFixed(1)}L ({usedKg} kg stored)</strong>
+          </span>
+          <span style={{ color: freeCapL === 0 ? 'var(--ra)' : 'var(--gl)', fontWeight: 600 }}>
+            {freeCapL === 0 ? '⛔ Chamber Full (5L Limit)' : `${freeCapL.toFixed(1)}L (${freeKg} kg) Free`}
           </span>
         </div>
-        <div className="shelf-progress-bar" style={{ height: '6px', marginBottom: '0' }}>
+        <div className="shelf-progress-bar" style={{ height: '7px', marginBottom: '0' }}>
           <div
             className="shelf-progress-fill"
             style={{
@@ -94,7 +98,7 @@ export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, 
       {/* Ambient Outside Weather */}
       <div className="outside-bar">
         <span>🌤️ Outside Ambient: <strong>{slot.outsideTemp || 33}°C</strong>, <strong>{slot.outsideHumidity || 60}% RH</strong></span>
-        <span>⚡ Dynamic cooling load modulation active</span>
+        <span>⚡ Dynamic cooling compressor load active</span>
       </div>
 
       {/* Shelf Life Tracker */}
@@ -125,13 +129,13 @@ export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, 
         {compatResult && selectedVegs?.length > 0 && (
           <span className={`compat-badge ${compatResult.compatible ? 'ok' : 'no'}`}>
             {compatResult.compatible
-              ? `✅ Compatible (${incomingQty || 1}L fits into ${freeCap.toFixed(1)}L free space)`
+              ? `✅ Compatible (${incomingKg || 1} kg / ${incomingLitres || 1.5}L fits into ${freeCapL.toFixed(1)}L free space)`
               : `❌ ${compatResult.compatReason || 'Incompatible'}`}
           </span>
         )}
         {compatResult?.compatible && selectedVegs?.length > 0 && onAddVegs && (
           <button className="btn btn-primary btn-sm" onClick={() => onAddVegs(slot._id)}>
-            + Merge {incomingQty || 1}L into this 5L Chamber
+            + Merge {incomingKg || 1} kg ({incomingLitres || 1.5}L) into this Chamber
           </button>
         )}
         <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setConf(true)}>
@@ -141,7 +145,7 @@ export default function SlotCard({ slot, compatResult, onAddVegs, selectedVegs, 
 
       {conf && (
         <div style={{ marginTop: '10px', padding: '11px', background: 'rgba(224,48,48,.08)', borderRadius: '8px', border: '1px solid rgba(224,48,48,.2)', fontSize: '.83rem' }}>
-          Release this 5L chamber and dispatch {usedCap}L produce for farmer <strong>{slot.farmerName}</strong> ({slot.farmerPhone})?
+          Release this 5L chamber and dispatch {usedKg} kg ({usedCapL}L) produce for farmer <strong>{slot.farmerName}</strong> ({slot.farmerPhone})?
           <div style={{ display: 'flex', gap: '7px', marginTop: '7px' }}>
             <button className="btn btn-danger btn-sm" onClick={() => { deleteSlot(slot._id, slot.allocatedSlot); setConf(false); }}>
               Yes, Release Chamber

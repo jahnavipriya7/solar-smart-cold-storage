@@ -3,7 +3,7 @@ const router = express.Router();
 const StorageSlot = require('../models/StorageSlot');
 const Alert = require('../models/Alert');
 
-const MAX_CHAMBER_CAPACITY = 5.0; // 5 Litres max
+const MAX_CHAMBER_CAPACITY = 5.0; // 5 Litres hardware limit
 
 function computeRange(vegs) {
   if (!vegs || !vegs.length) return null;
@@ -30,6 +30,13 @@ function computeRange(vegs) {
     targetHumidity: parseFloat(((minH + maxH) / 2).toFixed(1)),
     shelfLifeDays: minShelf
   };
+}
+
+function calculateVolumeFromKg(vegs, weightKg) {
+  const kg = parseFloat(weightKg) || 1.0;
+  if (!vegs || !vegs.length) return parseFloat((kg * 1.5).toFixed(1));
+  const avgDensity = vegs.reduce((sum, v) => sum + (v.densityLitersPerKg || 1.5), 0) / vegs.length;
+  return parseFloat((kg * avgDensity).toFixed(1));
 }
 
 function calculateDynamicLoad(outsideT, outsideH, targetT) {
@@ -99,8 +106,9 @@ router.get('/', async (req, res) => {
 
 router.post('/check-compat', async (req, res) => {
   try {
-    const { vegetables, quantityLitres } = req.body;
-    const qty = parseFloat(quantityLitres) || 1.0;
+    const { vegetables, weightKg } = req.body;
+    const kg = parseFloat(weightKg) || 1.0;
+    const incomingLitres = calculateVolumeFromKg(vegetables, kg);
     
     const newRange = computeRange(vegetables);
     if (!newRange) {
@@ -119,15 +127,15 @@ router.post('/check-compat', async (req, res) => {
       const oMaxH = Math.min(slot.maxHumidity, newRange.maxHumidity);
       
       const isClimateCompat = oMinT <= oMaxT && oMinH <= oMaxH;
-      const availableCapacity = Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0));
-      const hasCapacity = (slot.usedCapacityLitres || 0) + qty <= (slot.totalCapacityLitres || 5.0);
+      const availableCapacityL = Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0));
+      const hasCapacity = (slot.usedCapacityLitres || 0) + incomingLitres <= (slot.totalCapacityLitres || 5.0);
       
       const isFullCompatible = isClimateCompat && hasCapacity;
       
       let reason = '';
       if (!isClimateCompat) reason = 'Incompatible Temperature / Humidity';
-      else if (!hasCapacity) reason = 'Capacity Exceeded (' + availableCapacity.toFixed(1) + 'L remaining of 5L)';
-      else reason = 'Compatible (' + ((slot.usedCapacityLitres || 0) + qty).toFixed(1) + 'L / 5L used)';
+      else if (!hasCapacity) reason = 'Chamber Full / Exceeded (only ' + availableCapacityL.toFixed(1) + 'L space remaining of 5L)';
+      else reason = 'Compatible (' + ((slot.usedCapacityLitres || 0) + incomingLitres).toFixed(1) + 'L / 5L capacity used)';
       
       return {
         _id: slot._id,
@@ -136,7 +144,8 @@ router.post('/check-compat', async (req, res) => {
         farmerPhone: slot.farmerPhone,
         totalCapacityLitres: slot.totalCapacityLitres || 5.0,
         usedCapacityLitres: slot.usedCapacityLitres || 0,
-        availableCapacityLitres: availableCapacity,
+        usedWeightKg: slot.usedWeightKg || 0,
+        availableCapacityLitres: availableCapacityL,
         currentVegs: slot.vegetables.map(v => v.name),
         slotTempRange: slot.minTemp + '–' + slot.maxTemp + '°C',
         slotHumidityRange: slot.minHumidity + '–' + slot.maxHumidity + '%',
@@ -154,6 +163,7 @@ router.post('/check-compat', async (req, res) => {
     res.json({
       selfCompatible: true,
       newRange,
+      incomingLitres,
       slots: results
     });
   } catch (err) {
@@ -163,7 +173,7 @@ router.post('/check-compat', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { farmerName, farmerPhone, vegetables, quantityLitres, notes } = req.body;
+    const { farmerName, farmerPhone, vegetables, weightKg, notes } = req.body;
     
     if (!farmerName || !farmerPhone) {
       return res.status(400).json({ message: 'Farmer name and phone number are required.' });
@@ -172,9 +182,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Select at least one vegetable to store.' });
     }
     
-    const qty = parseFloat(quantityLitres) || 1.0;
-    if (qty <= 0 || qty > MAX_CHAMBER_CAPACITY) {
-      return res.status(400).json({ message: 'Crop quantity must be between 0.1 and 5.0 Litres (total chamber capacity is 5L).' });
+    const kg = parseFloat(weightKg) || 1.0;
+    const volumeLitres = calculateVolumeFromKg(vegetables, kg);
+    
+    if (volumeLitres <= 0 || volumeLitres > MAX_CHAMBER_CAPACITY) {
+      return res.status(400).json({
+        message: 'Crop quantity of ' + kg + ' kg converts to ' + volumeLitres + ' Litres, exceeding the 5.0 Litre hardware chamber limit.'
+      });
     }
     
     const range = computeRange(vegetables);
@@ -191,8 +205,9 @@ router.post('/', async (req, res) => {
       allocatedSlot,
       farmerName,
       farmerPhone,
+      usedWeightKg: kg,
+      usedCapacityLitres: volumeLitres,
       totalCapacityLitres: MAX_CHAMBER_CAPACITY,
-      usedCapacityLitres: qty,
       vegetables,
       minTemp: range.minTemp,
       maxTemp: range.maxTemp,
@@ -218,7 +233,7 @@ router.post('/', async (req, res) => {
       slotId: saved._id,
       slotName: saved.allocatedSlot,
       type: 'info',
-      message: saved.allocatedSlot + ' allocated to ' + saved.farmerName + ' (' + saved.farmerPhone + '). Quantity: ' + qty + 'L / 5L capacity. Storing: ' + vegetables.map(v => v.name).join(', ') + '. Target: ' + range.targetTemp + '°C, ' + range.targetHumidity + '% RH.'
+      message: saved.allocatedSlot + ' allocated to ' + saved.farmerName + ' (' + saved.farmerPhone + '). Quantity: ' + kg + ' kg (' + volumeLitres + 'L / 5L capacity). Storing: ' + vegetables.map(v => v.name).join(', ') + '. Target: ' + range.targetTemp + '°C, ' + range.targetHumidity + '% RH.'
     });
     
     res.status(201).json(saved);
@@ -232,13 +247,14 @@ router.post('/:id/add-vegetables', async (req, res) => {
     const slot = await StorageSlot.findById(req.params.id);
     if (!slot) return res.status(404).json({ message: 'Slot not found' });
     
-    const { vegetables, farmerName, farmerPhone, quantityLitres } = req.body;
-    const qty = parseFloat(quantityLitres) || 1.0;
+    const { vegetables, farmerName, farmerPhone, weightKg } = req.body;
+    const kg = parseFloat(weightKg) || 1.0;
+    const incomingLitres = calculateVolumeFromKg(vegetables, kg);
     
-    const newUsedCapacity = (slot.usedCapacityLitres || 0) + qty;
+    const newUsedCapacity = (slot.usedCapacityLitres || 0) + incomingLitres;
     if (newUsedCapacity > (slot.totalCapacityLitres || 5.0)) {
       return res.status(400).json({
-        message: 'Cannot add ' + qty + 'L. Chamber has only ' + Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0)).toFixed(1) + 'L space remaining (5L max capacity).'
+        message: 'Cannot add ' + kg + ' kg (' + incomingLitres + 'L). Chamber has only ' + Math.max(0, (slot.totalCapacityLitres || 5.0) - (slot.usedCapacityLitres || 0)).toFixed(1) + 'L remaining (5L max hardware capacity).'
       });
     }
     
@@ -250,6 +266,7 @@ router.post('/:id/add-vegetables', async (req, res) => {
     }
     
     slot.vegetables = allVegs;
+    slot.usedWeightKg = (slot.usedWeightKg || 0) + kg;
     slot.usedCapacityLitres = newUsedCapacity;
     slot.minTemp = range.minTemp;
     slot.maxTemp = range.maxTemp;
@@ -264,7 +281,7 @@ router.post('/:id/add-vegetables', async (req, res) => {
       slotId: slot._id,
       slotName: slot.allocatedSlot,
       type: 'info',
-      message: (farmerName || 'Farmer') + ' (' + (farmerPhone || 'N/A') + ') added ' + qty + 'L of ' + vegetables.map(v => v.name).join(', ') + ' to ' + slot.allocatedSlot + '. Capacity now: ' + newUsedCapacity.toFixed(1) + 'L / 5L.'
+      message: (farmerName || 'Farmer') + ' added ' + kg + ' kg (' + incomingLitres + 'L) of ' + vegetables.map(v => v.name).join(', ') + ' to ' + slot.allocatedSlot + '. Total volume: ' + newUsedCapacity.toFixed(1) + 'L / 5L.'
     });
     
     res.json(updated);
@@ -281,7 +298,7 @@ router.delete('/:id', async (req, res) => {
     await Alert.create({
       slotName: slot.allocatedSlot,
       type: 'info',
-      message: slot.allocatedSlot + ' released by ' + slot.farmerName + ' (' + slot.farmerPhone + '). 5L capacity freed for next allocation.'
+      message: slot.allocatedSlot + ' released by ' + slot.farmerName + ' (' + slot.farmerPhone + '). 5L chamber sanitized and free for next farmer.'
     });
     
     res.json({ message: 'Chamber released' });
