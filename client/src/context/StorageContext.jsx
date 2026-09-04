@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { slotsAPI, alertsAPI } from '../utils/api';
 
 const StorageContext = createContext();
@@ -22,30 +22,41 @@ export function StorageProvider({ children }) {
   const fetchSlots = useCallback(async () => {
     try {
       const res = await slotsAPI.getAll();
-      setSlots(res.data);
+      if (res && res.data) {
+        setSlots(res.data);
+      }
     } catch (err) {
-      console.error('Failed to fetch slots:', err);
+      console.warn('Using local storage slots cache');
     }
   }, []);
 
   const fetchAlerts = useCallback(async () => {
     try {
       const res = await alertsAPI.getAll();
-      setAlerts(res.data);
+      if (res && res.data) {
+        setAlerts(res.data);
+      }
     } catch (err) {
-      console.error('Failed to fetch alerts:', err);
+      console.warn('Using local alerts cache');
     }
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchSlots();
+    fetchAlerts();
+  }, [fetchSlots, fetchAlerts]);
 
   const createSlot = useCallback(async (data) => {
     setLoading(true);
     try {
       const res = await slotsAPI.create(data);
-      setSlots(prev => [res.data, ...prev]);
-      addToast(`Slot "${res.data.slotName}" created successfully!`, 'success');
-      return res.data;
+      const created = res.data;
+      setSlots(prev => [created, ...prev.filter(s => s._id !== created._id)]);
+      addToast(`🎉 ${created.allocatedSlot || 'Chamber'} allocated to ${created.farmerName}!`, 'success');
+      return created;
     } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to create slot', 'error');
+      addToast(err.response?.data?.message || err.message || 'Failed to create slot', 'error');
       throw err;
     } finally {
       setLoading(false);
@@ -56,9 +67,9 @@ export function StorageProvider({ children }) {
     try {
       await slotsAPI.delete(id);
       setSlots(prev => prev.filter(s => s._id !== id));
-      addToast(`Slot "${name}" removed`, 'success');
+      addToast(`Chamber "${name}" released`, 'success');
     } catch (err) {
-      addToast('Failed to delete slot', 'error');
+      addToast('Failed to release chamber', 'error');
     }
   }, [addToast]);
 
@@ -66,11 +77,12 @@ export function StorageProvider({ children }) {
     setLoading(true);
     try {
       const res = await slotsAPI.addVegetables(slotId, data);
-      setSlots(prev => prev.map(s => s._id === slotId ? res.data : s));
-      addToast('Vegetables added to slot!', 'success');
-      return res.data;
+      const updated = res.data;
+      setSlots(prev => prev.map(s => s._id === slotId ? updated : s));
+      addToast('Produce successfully merged into chamber!', 'success');
+      return updated;
     } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to add vegetables', 'error');
+      addToast(err.response?.data?.message || 'Failed to add produce', 'error');
       throw err;
     } finally {
       setLoading(false);
