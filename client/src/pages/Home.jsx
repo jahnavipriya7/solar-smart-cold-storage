@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 const features = [
   { icon: '☀️', title: 'Solar & Battery Powered', desc: 'Seamlessly switches between direct Solar PV during daylight and Battery backup, keeping operational costs near zero.' },
-  { icon: '🌡️', title: 'Smart Humidity and Temperature Control', desc: 'Automatically computes dual optimal temperature and relative humidity targets for all stored vegetable varieties.' },
+  { icon: '🌡️', title: 'Smart Temperature Control', desc: 'Automatically computes optimal temperature targets based on the specific thermal requirements of stored produce.' },
   { icon: '💧', title: 'Humidity Range Optimization', desc: 'Maintains ideal 40–100% relative humidity to prevent dehydration, weight loss, and condensation spoilage.' },
   { icon: '🌿', title: 'Early Spoilage Detection', desc: 'IoT ethylene sensors detect early organic decomposition and notify farmers before produce spoils.' },
   { icon: '⚡', title: 'Dynamic Weather Load Control', desc: 'Intelligently increases or decreases refrigeration compressor load based on outside ambient temperature and humidity.' },
@@ -39,7 +39,7 @@ export default function Home() {
             <div className="stat-card"><div className="stat-value">40–100%</div><div className="stat-label">Humidity Range</div></div>
             <div className="stat-card"><div className="stat-value">🌿</div><div className="stat-label">Early Spoilage Detection</div></div>
             <div className="stat-card"><div className="stat-value">🏠</div><div className="stat-label">Automated Chamber Allocation</div></div>
-            <div className="stat-card"><div className="stat-value">5 L</div><div className="stat-label">Per Chamber Capacity</div></div>
+            <div className="stat-card"><div className="stat-value">⚡</div><div className="stat-label">Dynamic Weather Control</div></div>
           </div>
         </div>
       </section>
