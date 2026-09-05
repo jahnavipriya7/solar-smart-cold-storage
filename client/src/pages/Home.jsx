@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 const features = [
   { icon: '☀️', title: 'Solar & Battery Powered', desc: 'Seamlessly switches between direct Solar PV during daylight and Battery backup, keeping operational costs near zero.' },
   { icon: '🌡️', title: 'Smart Humidity and Temperature Control', desc: 'Automatically computes dual optimal temperature and relative humidity targets for all stored vegetable varieties.' },
+  { icon: '💧', title: 'Humidity Range Optimization', desc: 'Maintains ideal 40–100% relative humidity to prevent dehydration, weight loss, and condensation spoilage.' },
   { icon: '🌿', title: 'Early Spoilage Detection', desc: 'IoT ethylene sensors detect early organic decomposition and notify farmers before produce spoils.' },
   { icon: '⚡', title: 'Dynamic Weather Load Control', desc: 'Intelligently increases or decreases refrigeration compressor load based on outside ambient temperature and humidity.' },
   { icon: '👨‍🌾', title: 'Auto Chamber Allocation', desc: 'Farmers input their produce and contact details — the system automatically assigns and optimizes storage chambers.' },
@@ -23,7 +24,7 @@ export default function Home() {
       <section className="hero">
         <div className="hero-content">
           <div className="hero-badge">🌿 Renewable Solar Energy + IoT Cold Storage</div>
-          <h1>Solar-Powered <span>Sun Chill</span> with Early Spoilage Detection</h1>
+          <h1>Solar-Powered <span>Cold Storage</span> with Early Spoilage Detection</h1>
           <p>
             Preserve post-harvest freshness, prevent vegetable spoilage with IoT sensors, and dynamically adapt cooling load to ambient weather conditions.
           </p>
