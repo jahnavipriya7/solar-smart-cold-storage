@@ -72,6 +72,20 @@ export default function TempGuide() {
           })}
         </div>
       </div>
+
+      <footer style={{
+        textAlign: 'center',
+        marginTop: '48px',
+        padding: '24px 16px',
+        borderTop: '1px solid var(--border, #2a3a2a)',
+        color: 'var(--mu, #7a9a7a)',
+        fontSize: '0.82rem',
+        lineHeight: '1.6'
+      }}>
+        <div style={{ fontSize: '1.4rem', marginBottom: '6px' }}>🇮🇳</div>
+        <div>Data collected from <strong>Government of India</strong></div>
+        <div>Ministry of New and Renewable Energy</div>
+      </footer>
     </div>
   );
 }

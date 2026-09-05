@@ -16,7 +16,7 @@ export default function Navbar() {
     <nav>
       <NavLink to="/" className="nav-brand">
         <span>🌱</span>
-        <span>SolarCold IoT</span>
+        <span>SunChill  IoT</span>
       </NavLink>
       <div className="nav-links">
         <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>Home</NavLink>
